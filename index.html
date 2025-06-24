@@ -461,7 +461,6 @@ function setupScroll() {
       a.click();
       URL.revokeObjectURL(a.href);
     }
-    renderSingle();
 
 
 function goToDate(dateStr) {
@@ -523,10 +522,16 @@ auth.onAuthStateChanged(user => {
     document.getElementById("login-btn").style.display = "none";
     document.getElementById("logout-btn").style.display = "inline-block";
     document.getElementById("user-info").textContent = `👤 ${user.email}`;
+        baseDate = new Date();
+    renderSingle(formatDate(baseDate));
+
   } else {
     document.getElementById("login-btn").style.display = "inline-block";
     document.getElementById("logout-btn").style.display = "none";
     document.getElementById("user-info").textContent = '';
+        baseDate = new Date();
+    renderSingle(formatDate(baseDate));
+
 if (mode === 'notes') loadNotes().then(renderNotesView);
 
   }
