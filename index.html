@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Cache-Control" content="no-store">
   <meta charset="UTF-8" />
-  <title>Eternal Journal v2</title>
+  <title>Eterlog</title>
   <style id="theme">
     :root {
       --bg: #1e1e1e; --fg: #d4d4d4; --accent: #333;
@@ -75,6 +75,24 @@
   font-size: 12px;
 }
 
+.note-tab {
+  position: relative;
+  padding-right: 16px;
+}
+
+.delete-btn {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  color: white;
+  display: none;
+}
+
+.note-tab:hover .delete-btn,
+.note-tab.active .delete-btn {
+  display: inline;
+}
+
   </style>
   <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -101,17 +119,18 @@
 </head>
 <body>
 <div class="top-bar">
-  <div class="nav-buttons">
-    <button onclick="changeDay(-1)">← Prev</button>
-    <button onclick="goToday()">📍 Today</button>
-    <button onclick="changeDay(1)">Next →</button>
-  </div>
+<div class="nav-buttons">
+  <button onclick="changeDay(-1)">← Prev</button>
+  <button onclick="goToday()">📍 Today</button>
+  <button onclick="changeDay(1)">Next →</button>
+  <button id="toggleNotesBtn" onclick="toggleNotesMode()">🗒️ Bits Mode</button>
+</div>
 <div class="nav-buttons">
 <button id="toggleModeBtn" onclick="toggleMode()">🔁 Toggle Mode</button>
   <button onclick="toggleTheme()">🌓 Theme</button>
-  <button onclick="downloadAll()">⬇ Download All</button>
-  <button id="login-btn" onclick="signInWithGoogle()">🔐 Sign In</button>
-  <button id="logout-btn" onclick="signOut()" style="display:none">🔓 Sign Out</button>
+  <button onclick="downloadAll()">⬇ Download</button>
+  <button id="login-btn" onclick="signInWithGoogle()">🔐 LogIn</button>
+  <button id="logout-btn" onclick="signOut()" style="display:none">🔓 LogOut</button>
   <input type="date" id="date-picker" onchange="goToDate(this.value)" style="margin-left: 8px;">
 </div>
   <div id="user-info" style="font-size:12px; color:var(--label); margin-left:16px;"></div>
@@ -121,6 +140,8 @@
   <div id="journal" class="journal-wrapper"></div>
   <script>
     let mode = 'single';
+    let notes = [];
+let selectedNoteIndex = 0;
     if ('scrollRestoration' in history) {
   history.scrollRestoration = 'manual';
 }
@@ -154,12 +175,13 @@ function hardResetToSingleMode() {
       document.body.classList.toggle('light');
       localStorage.setItem('theme', document.body.classList.contains('light')? 'light' : 'dark');
     }
-    function updateToggleLabel() {
+function updateToggleLabel() {
   const btn = document.getElementById('toggleModeBtn');
-  if (mode === 'single') {
-    btn.textContent = '🔁 Toggle to Continuous View';
+  if (mode === 'notes') {
+    btn.style.display = 'none';
   } else {
-    btn.textContent = '🔁 Toggle to Single Day View';
+    btn.style.display = 'inline-block';
+    btn.textContent = (mode === 'single') ? '🔁 Continuous' : '🔁 Single Day';
   }
 }
 
@@ -215,11 +237,15 @@ async function createDay(date) {
     function attachListeners(el=document) {
       el.querySelectorAll('textarea').forEach(t=>{
 t.oninput = async () => {
+  if (t.value.length > 5000) {
+    t.value = t.value.slice(0, 5000);
+    alert("⚠️ 5000 chars max");
+  }
   const d = t.dataset.date;
   const f = t.dataset.field;
-  const e = await loadEntry(d); // 👈 esperar a que cargue el objeto real
+  const e = await loadEntry(d);
   e[f] = t.value;
-  saveEntry(d, e); // 👈 ahora sí: e es un objeto
+  saveEntry(d, e);
 };
       });
     }
@@ -501,10 +527,236 @@ auth.onAuthStateChanged(user => {
     document.getElementById("login-btn").style.display = "inline-block";
     document.getElementById("logout-btn").style.display = "none";
     document.getElementById("user-info").textContent = '';
+if (mode === 'notes') loadNotes().then(renderNotesView);
+
   }
 });
 
 
+function loadNotes() {
+  if (auth.currentUser) {
+    return db.collection("notes").doc(auth.currentUser.uid)
+      .get().then(doc => {
+        notes = doc.exists ? doc.data().bits || [] : [];
+      });
+  } else {
+    notes = JSON.parse(localStorage.getItem("note_bits") || "[]");
+    return Promise.resolve();
+  }
+}
+
+function saveNotes() {
+  if (auth.currentUser) {
+    db.collection("notes").doc(auth.currentUser.uid)
+      .set({ bits: notes });
+  } else {
+    localStorage.setItem("note_bits", JSON.stringify(notes));
+  }
+}
+
+
+async function toggleNotesMode() {
+  if (mode === 'notes') {
+    mode = 'single';
+    document.getElementById('toggleNotesBtn').textContent = '🗒️ Bits';
+    journal.innerHTML = '';
+    rendered.clear();
+    renderSingle(formatDate(baseDate));
+  } else {
+    mode = 'notes';
+    document.getElementById('toggleNotesBtn').textContent = '📅 Days Mode';
+    await loadNotes();
+    if (notes.length === 0) {
+      notes.push({ content: '' });
+      selectedNoteIndex = 0;
+      saveNotes();
+    }
+    renderNotesView();
+  }
+  updateToggleLabel();
+  const navBtns = document.querySelectorAll(".nav-buttons button");
+navBtns.forEach(btn => {
+  const text = btn.textContent;
+  if (text.includes('Prev') || text.includes('Today') || text.includes('Next')) {
+    btn.style.display = (mode === 'notes') ? 'none' : 'inline-block';
+  }
+});
+
+}
+
+
+function renderNotesView() {
+  journal.innerHTML = '';
+  const container = document.createElement('div');
+  container.style.display = 'flex';
+  container.style.height = '100%';
+
+  const sidebar = document.createElement('div');
+  sidebar.style.width = '120px';
+  sidebar.style.borderRight = '1px solid var(--accent)';
+  sidebar.style.overflowY = 'auto';
+
+  const main = document.createElement('div');
+  main.style.flex = '1';
+  main.style.padding = '16px';
+
+  const storedIndex = parseInt(localStorage.getItem("note_selected_index"));
+  if (!isNaN(storedIndex) && storedIndex < notes.length) {
+    selectedNoteIndex = storedIndex;
+  }
+
+function openTrash() {
+  const trash = JSON.parse(localStorage.getItem("note_trash") || "[]");
+  const out = trash.map((n, i) =>
+    `#${i}\n${n.content.slice(0, 300)}`
+  ).join("\n\n──────────────\n\n");
+  document.getElementById("trash-content").textContent = out;
+  document.getElementById("trash-modal").style.display = 'block';
+}
+
+  function closeTrash() {
+    document.getElementById("trash-modal").style.display = 'none';
+  }
+
+  function emptyTrash() {
+    if (!confirm("¿Vaciar papelera?")) return;
+    localStorage.removeItem("note_trash");
+    closeTrash();
+  }
+
+  function renderSidebar() {
+    sidebar.innerHTML = '';
+    notes.forEach((n, i) => {
+      const title = (n.content.split('\n')[0] || '').slice(0, 8)
+        + ((n.content.split('\n')[0] || '').length > 8 ? '…' : '');
+      const b = document.createElement('div');
+      b.textContent = title || '(empty)';
+      b.className = 'note-tab';
+
+      const del = document.createElement('span');
+      del.textContent = '×';
+      del.className = 'delete-btn';
+      del.onclick = (e) => {
+        e.stopPropagation();
+        const removed = notes.splice(i, 1)[0];
+        const trash = JSON.parse(localStorage.getItem("note_trash") || "[]");
+        trash.unshift(removed);
+        localStorage.setItem("note_trash", JSON.stringify(trash));
+        if (selectedNoteIndex >= notes.length) selectedNoteIndex = notes.length - 1;
+        saveNotes();
+        renderSidebar();
+        renderMain();
+      };
+
+      b.appendChild(del);
+      b.style.padding = '4px';
+      b.style.cursor = 'pointer';
+      b.style.borderBottom = '1px solid var(--accent)';
+      b.style.background = i === selectedNoteIndex ? 'var(--highlight)' : '';
+      b.onclick = () => {
+        selectedNoteIndex = i;
+        localStorage.setItem("note_selected_index", i);
+        renderSidebar();
+        renderMain();
+      };
+      sidebar.appendChild(b);
+    });
+
+    const add = document.createElement('button');
+    add.textContent = '+';
+    add.style.width = '100%';
+    add.style.background = 'var(--bg)';
+    add.style.color = 'var(--fg)';
+    add.style.border = '1px solid var(--accent)';
+    add.style.cursor = 'pointer';
+
+add.onclick = () => {
+  if (notes.length >= 50) {
+    alert("❌ 50 notes max");
+    return;
+  }
+  notes.unshift({ content: '' });
+  selectedNoteIndex = 0;
+  saveNotes();
+  renderSidebar();
+  renderMain();
+};
+    sidebar.appendChild(add);
+
+    const trashBtn = document.createElement('button');
+    trashBtn.textContent = '🗑 Trash';
+    trashBtn.style.width = '100%';
+    trashBtn.style.background = 'var(--bg)';
+    trashBtn.style.color = 'var(--fg)';
+    trashBtn.style.border = '1px solid var(--accent)';
+    trashBtn.style.cursor = 'pointer';
+    trashBtn.onclick = openTrash;
+
+    trashBtn.style.position = 'absolute';
+    trashBtn.style.bottom = '0';
+    trashBtn.style.left = '0';
+    trashBtn.style.width = '100%';
+    sidebar.style.position = 'relative';
+    sidebar.style.paddingBottom = '36px';
+
+    sidebar.appendChild(trashBtn);
+  }
+
+  function renderMain() {
+    main.innerHTML = '';
+    const note = notes[selectedNoteIndex];
+    if (!note) return;
+    const ta = document.createElement('textarea');
+    ta.style.width = '100%';
+    ta.style.height = '100%';
+    ta.value = note.content;
+    ta.style.background = getComputedStyle(document.body).getPropertyValue('--textarea').trim();
+    ta.style.color = getComputedStyle(document.body).getPropertyValue('--fg').trim();
+    ta.style.border = `1px solid ${getComputedStyle(document.body).getPropertyValue('--accent').trim()}`;
+    ta.style.padding = '8px';
+    ta.style.fontFamily = 'inherit';
+    ta.style.fontSize = '14px';
+
+ta.oninput = () => {
+  if (ta.value.length > 10000) {
+    ta.value = ta.value.slice(0, 10000);
+    alert("⚠️ max 10000 chars");
+  }
+  note.content = ta.value;
+  saveNotes();
+  renderSidebar();
+};
+    main.appendChild(ta);
+  }
+
+  renderSidebar();
+  renderMain();
+
+  container.appendChild(sidebar);
+  container.appendChild(main);
+  journal.appendChild(container);
+
+  // ✅ Asigna handlers ahora que los botones existen en el DOM
+  const emptyBtn = document.getElementById("emptyTrashBtn");
+  const closeBtn = document.getElementById("closeTrashBtn");
+  if (emptyBtn) emptyBtn.onclick = emptyTrash;
+  if (closeBtn) closeBtn.onclick = closeTrash;
+}
+
+
+
+
   </script>
+  <div id="trash-modal" style="display:none; position:fixed; inset:0; background:#000c; z-index:9999; padding:2em;">
+  <div style="background:var(--bg); color:var(--fg); padding:1em; max-width:600px; margin:auto; height:80%; overflow:auto; border:1px solid var(--accent); box-shadow:0 0 12px #000">
+    <h2>🗑 Papelera</h2>
+    <pre id="trash-content" style="white-space:pre-wrap; font-family:monospace;"></pre>
+    <div style="margin-top:1em; display:flex; gap:8px;">
+<button id="emptyTrashBtn" style="background:red; color:white;">Vaciar Papelera</button>
+<button id="closeTrashBtn" style="background:gray; color:white;">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
