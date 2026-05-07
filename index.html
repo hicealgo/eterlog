@@ -6,41 +6,59 @@
   <title>Eterlog</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="stylesheet" href="style.css">
-  <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 <div class="top-bar">
-<div class="nav-buttons">
-  <button onclick="changeDay(-1)">← Prev</button>
-  <button onclick="goToday()">📍 Today</button>
-  <button onclick="changeDay(1)">Next →</button>
-  <button id="toggleNotesBtn" onclick="toggleNotesMode()">🗒️ Bits Mode</button>
-</div>
-<div class="nav-buttons">
-<button id="toggleModeBtn" onclick="toggleMode()">🔁 Toggle Mode</button>
-  <button onclick="toggleTheme()">🌓 Theme</button>
-  <button onclick="downloadAll()">⬇ Download</button>
-  <button id="login-btn" onclick="signInWithGoogle()">🔐 LogIn</button>
-  <button id="logout-btn" onclick="signOut()" style="display:none">🔓 LogOut</button>
-  <input type="date" id="date-picker" onchange="goToDate(this.value)" style="margin-left: 8px;">
-</div>
-  <div id="user-info" style="font-size:12px; color:var(--label); margin-left:16px;"></div>
+  <div class="nav-buttons" id="journal-nav">
+    <button onclick="changeDay(-1)">← Prev</button>
+    <button onclick="goToday()">📍 Today</button>
+    <button onclick="changeDay(1)">Next →</button>
+  </div>
+  <div class="nav-buttons">
+    <button id="toggleNotesBtn" onclick="toggleNotesMode()">🗒️ Bits</button>
+    <button id="wins-done-btn" onclick="enterWinsMode('done')">🏆 Wins</button>
+    <button id="wins-todo-btn" onclick="enterWinsMode('todo')">📋 Todo</button>
+    <button id="wins-misc-btn" onclick="enterWinsMode('misc')">🌀 Misc</button>
+    <button id="toggleModeBtn" onclick="toggleMode()">🔁 Continuous</button>
+    <button id="heatmapBtn" onclick="toggleHeatmap()">📊 Map</button>
+    <button id="themeBtn" onclick="toggleTheme()">🌑 Theme</button>
+    <button onclick="downloadAll()">⬇</button>
+    <button id="login-btn" onclick="signInWithGoogle()">🔐 LogIn</button>
+    <button id="logout-btn" onclick="signOut()" style="display:none">🔓 LogOut</button>
+    <input type="date" id="date-picker" onchange="goToDate(this.value)">
+  </div>
+  <div id="user-info"></div>
 </div>
 
-  <div id="journal" class="journal-wrapper"></div>
-  <div id="trash-modal" style="display:none; position:fixed; inset:0; background:#000c; z-index:9999; padding:2em;">
-  <div style="background:var(--bg); color:var(--fg); padding:1em; max-width:600px; margin:auto; height:80%; overflow:auto; border:1px solid var(--accent); box-shadow:0 0 12px #000">
+<div id="heatmap-overlay">
+  <div class="heatmap-toprow">
+    <div class="heatmap-year-nav">
+      <button onclick="shiftHeatmapYear(-1)">← Prev</button>
+      <span id="heatmap-year-label">2026</span>
+      <button id="heatmap-next-year-btn" onclick="shiftHeatmapYear(1)">Next →</button>
+    </div>
+    <button class="heatmap-close" onclick="toggleHeatmap()">✕ close</button>
+  </div>
+  <div class="heatmap-content"></div>
+</div>
+<div id="heat-tooltip"></div>
+
+<div id="journal" class="journal-wrapper"></div>
+
+<div id="trash-modal">
+  <div class="trash-inner">
     <h2>🗑 Papelera</h2>
-    <pre id="trash-content" style="white-space:pre-wrap; font-family:monospace;"></pre>
-    <div style="margin-top:1em; display:flex; gap:8px;">
-<button id="emptyTrashBtn" style="background:red; color:white;">Vaciar Papelera</button>
-<button id="closeTrashBtn" style="background:gray; color:white;">Cerrar</button>
+    <pre id="trash-content"></pre>
+    <div style="margin-top:1em;display:flex;gap:8px;">
+      <button id="emptyTrashBtn" style="background:red;color:white;">Vaciar</button>
+      <button id="closeTrashBtn" style="background:gray;color:white;">Cerrar</button>
     </div>
   </div>
 </div>
+
 <script src="main.js"></script>
 </body>
 </html>
